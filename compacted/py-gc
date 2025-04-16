@@ -1,0 +1,37 @@
+import datetime
+from dateutil import parser
+from dateutil.relativedelta import relativedelta
+import urllib.parse
+
+def generate_gcal_link(n: str, sds: str, eds: str = None, desc: str = None, loc: str = None, ad: bool = False, lt: str = 'Add to gCal', cls: list[str] = ['gcal-button', 'button']) -> str:
+    try:
+        sdt = parser.parse(sds)
+        sdf = sdt.strftime('%Y%m%d') if ad else sdt.strftime('%Y%m%dT%H%M%S')
+
+        if eds and len(eds) > 2:
+            edt = parser.parse(eds)
+            if ad:
+                edt += relativedelta(days=1)
+                edf = edt.strftime('%Y%m%d')
+            else:
+                edf = edt.strftime('%Y%m%dT%H%M%S')
+        else:
+            if ad:
+                edt = sdt + relativedelta(days=1)
+                edf = edt.strftime('%Y%m%d')
+            else:
+                edt = sdt + relativedelta(hours=2)
+                edf = edt.strftime('%Y%m%dT%H%M%S')
+
+        burl = 'https://www.google.com/calendar/event?action=TEMPLATE'
+        prms = {'text': n, 'dates': f"{sdf}/{edf}"}
+        if desc: prms['details'] = desc
+        if loc: prms['location'] = loc
+
+        qs = urllib.parse.urlencode(prms, quote_via=urllib.parse.quote_plus)
+        furl = f"{burl}&{qs}"
+        cs = ' '.join(cls)
+        out = f'<a href="{furl}" class="{cs}" target="_blank" rel="noopener noreferrer">{lt}</a>'
+        return out
+    except Exception:
+        return "" # Devuelve cadena vacía en caso de error
