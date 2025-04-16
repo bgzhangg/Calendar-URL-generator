@@ -1,0 +1,144 @@
+import datetime
+from dateutil import parser
+from dateutil.relativedelta import relativedelta
+import urllib.parse
+
+def generate_gcal_link(
+    name: str,
+    start_date_str: str,
+    end_date_str: str = None,
+    description: str = None,
+    location: str = None,
+    all_day: bool = False,
+    link_text: str = 'Add to gCal',
+    classes: list[str] = ['gcal-button', 'button']
+) -> str:
+    """
+    Crea un enlace HTML "Añadir a Google Calendar".
+
+    Esta función es conveniente porque no requiere una conexión API.
+    Ten en cuenta que esto solo permite añadir un único evento.
+    Los datos no tienen que existir previamente en ningún calendario de Google.
+    Simplemente añade los datos de tu evento al Google Calendar del usuario final, un elemento a la vez.
+
+    Args:
+        name: El título principal del evento.
+        start_date_str: La fecha y hora de inicio en cualquier formato que dateutil.parser pueda entender.
+        end_date_str: La fecha y hora de finalización en cualquier formato que dateutil.parser pueda entender.
+                      Si es None o está vacío, se asumirá una duración de 2 horas.
+        description: El texto descriptivo más largo del evento.
+        location: La ubicación del evento - cualquier texto que Google Maps pueda interpretar como un punto único.
+        all_day: ¿Es el evento "Todo el día" sin mostrar horas?
+        link_text: El texto del enlace. Por defecto es 'Add to gCal'.
+        classes: Una lista de clases CSS para añadir al elemento de enlace.
+
+    Returns:
+        Una cadena HTML con el enlace para añadir el evento a Google Calendar.
+    """
+    try:
+        # Analizar la fecha de inicio
+        start_dt = parser.parse(start_date_str)
+
+        # Formatear la fecha de inicio según si es todo el día o no
+        if all_day:
+            start_date_formatted = start_dt.strftime('%Y%m%d')
+        else:
+            # Google Calendar prefiere la hora UTC, pero para mantener la paridad con
+            # el PHP original que no maneja zonas horarias explícitamente,
+            # usaremos la hora local y el formato ISO sin 'Z'.
+            # Si se requiere UTC, se necesitaría manejo de zonas horarias.
+            start_date_formatted = start_dt.strftime('%Y%m%dT%H%M%S')
+
+        # Analizar y formatear la fecha de fin
+        if end_date_str and len(end_date_str) > 2:
+            end_dt = parser.parse(end_date_str)
+            if all_day:
+                # Para eventos de todo el día, Google espera que la fecha de fin sea el día *después* del último día.
+                end_dt += relativedelta(days=1)
+                end_date_formatted = end_dt.strftime('%Y%m%d')
+            else:
+                end_date_formatted = end_dt.strftime('%Y%m%dT%H%M%S')
+        else:
+            # Si no hay fecha de fin o es inválida, por defecto son 2 horas después del inicio
+            if all_day:
+                # Si es todo el día y sin fecha de fin, dura solo ese día.
+                # Google espera que la fecha de fin sea el día *después*.
+                end_dt = start_dt + relativedelta(days=1)
+                end_date_formatted = end_dt.strftime('%Y%m%d')
+            else:
+                end_dt = start_dt + relativedelta(hours=2)
+                end_date_formatted = end_dt.strftime('%Y%m%dT%H%M%S')
+
+        # Construir la URL base
+        base_url = 'https://www.google.com/calendar/event?action=TEMPLATE'
+
+        # Parámetros de la URL
+        params = {
+            'text': name,
+            'dates': f"{start_date_formatted}/{end_date_formatted}"
+        }
+        if description:
+            params['details'] = description
+        if location:
+            params['location'] = location
+
+        # Codificar los parámetros y construir la URL final
+        # Usamos quote_plus para codificar espacios como '+' que es común en query strings
+        query_string = urllib.parse.urlencode(params, quote_via=urllib.parse.quote_plus)
+        final_url = f"{base_url}&{query_string}"
+
+        # Construir la salida del enlace HTML
+        class_string = ' '.join(classes)
+        output = f'<a href="{final_url}" class="{class_string}" target="_blank" rel="noopener noreferrer">{link_text}</a>'
+
+        return output
+
+    except Exception as e:
+        print(f"Error generando el enlace de Google Calendar: {e}")
+        # Devolver un enlace vacío o un mensaje de error podría ser una opción
+        return f""
+
+
+# --- Ejemplo de Uso ---
+
+# Ejemplo 1: Evento simple con hora
+print("Ejemplo 1:")
+print(generate_gcal_link('Evento de Ejemplo 1', 'June 30, 2025 8:00pm'))
+print("-" * 20)
+
+# Ejemplo 2: Evento con fecha de fin, descripción y ubicación
+print("Ejemplo 2:")
+print(generate_gcal_link(
+    name='Evento de Ejemplo 2',
+    start_date_str='June 30, 2025 8:00pm',
+    end_date_str='July 2, 2025 10:00am',
+    description='Esta es mi descripción detallada del evento.',
+    location='1600 Pennsylvania Ave NW, Washington, DC 20500'
+))
+print("-" * 20)
+
+# Ejemplo 3: Evento de todo el día con texto de enlace y clases personalizadas
+print("Ejemplo 3:")
+print(generate_gcal_link(
+    name='Evento de Ejemplo 3 (Todo el día)',
+    start_date_str='June 30, 2025', # Sin hora, dateutil lo interpreta como medianoche
+    end_date_str='July 2, 2025',   # El evento termina *antes* del inicio del 2 de julio
+    description='Descripción para el evento de todo el día.',
+    location='Times Square, New York, NY',
+    all_day=True,
+    link_text='Añadir a Google Calendar',
+    classes=['mi-clase-personalizada', 'otro-boton']
+))
+print("-" * 20)
+
+# Ejemplo 4: Evento de todo el día (un solo día)
+print("Ejemplo 4:")
+print(generate_gcal_link(
+    name='Evento de Ejemplo 4 (Un día)',
+    start_date_str='July 15, 2025',
+    # end_date_str se calculará automáticamente como el día siguiente
+    description='Evento que dura todo el 15 de julio.',
+    location='Guayaquil, Ecuador',
+    all_day=True
+))
+print("-" * 20)
